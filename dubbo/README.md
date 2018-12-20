@@ -162,3 +162,34 @@ consumer代码:
 ### 异步消费调用
 
 ### Dubbo的整体分层
+
+![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/dubbo.png)
+
+- 其中 Service 和 Config 层为 API，对于服务提供方来说，使用 ServiceConfig API 来代表一个要发布的服务配置对象，对于服务消费方来说，ReferenceConfig 代表了一个要消费的服务的配置对象。可以直接初始化配置类，也可以通过 Spring 解析配置自动生成配置类。
+
+- 其它各层均为 SPI层，SPI 意味着下面各层都是组件化可以被替换的，这也是 Dubbo 设计的比较好的一点。Dubbo 增强了 JDK 中提供的标准 SPI 功能，在 Dubbo 中除了 Service 和 Config 层外，其它各层都是通过实现扩展点接口来提供服务的，Dubbo 增强的 SPI 增加了对扩展点 IoC 和 AOP 的支持，一个扩展点可以直接 setter 注入其它扩展点，并且不会一次性实例化扩展点的所有实现类，这避免了当扩展点实现类初始化很耗时，但当前还没用上它的功能时仍进行加载，浪费资源的情况；增强的 SPI 是在具体用某一个实现类的时候才对具体实现类进行实例化。后续会具体讲解 Dubbo 增强的 SPI 的实现原理
+
+- proxy 服务代理层：扩展接口为 ProxyFactory，Dubbo 提供的实现主要有 JavassistProxyFactory（默认使用）和 JdkProxyFactory，用来对服务提供方和服务消费方的服务进行代理
+
+- registry 注册中心层：封装服务地址的注册与发现，扩展接口 Registry 对应的扩展接口实现为 ZookeeperRegistry、RedisRegistry、MulticastRegistry、DubboRegistry等。扩展接口 RegistryFactory 对应的扩展接口实现为 DubboRegistryFactory、DubboRegistryFactory、RedisRegistryFactory、ZookeeperRegistryFactory
+
+- cluster 路由层：封装多个提供者的路由及负载均衡，并桥接注册中心， 集群容错扩展接口 Cluster 对应的实现类有 FailoverCluster(失败重试)、FailbackCluster（失败自动恢复）、FailfastCluster（快速失败）、FailsafeCluster（失败安全）、ForkingCluster（并行调用）等，均衡扩展接口 LoadBalance 对应的实现类为 RandomLoadBalance（随机）、RoundRobinLoadBalance（轮询）、LeastActiveLoadBalance（最小活跃数）、ConsistentHashLoadBalance（一致性hash)等
+
+- monitor 监控层：RPC 调用次数和调用时间监控，扩展接口为 MonitorFactory，对应的实现类为 DubboMonitorFactroy
+
+- protocol 远程调用层：封装 RPC 调用，扩展接口为 Protocol， 对应实现有 RegistryProtocol、DubboProtocol、InjvmProtocol 等
+
+- exchange 信息交换层：封装请求响应模式，同步转异步，扩展接口 Exchanger，对应扩展实现有 HeaderExchanger 等
+
+- transport 网络传输层：抽象 mina 和 netty 为统一接口，扩展接口为 Channel，对应实现有 NettyChannel、MinaChannel 等
+
+- serialize 数据序列化层：可复用的一些工具，扩展接口为 Serialization，对应扩展实现有 DubboSerialization、FastJsonSerialization、Hessian2Serialization、JavaSerialization等，扩展接口ThreadPool对应扩展实现有 FixedThreadPool、CachedThreadPool、LimitedThreadPool 等
+
+### 远程调用概述
+
+#### 暴露一个服务过程
+![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/dubbo_rpc.png)
+
+#### 消费一个服务
+![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/dubbo_rpc_consumer.png)
+
