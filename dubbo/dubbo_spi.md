@@ -159,7 +159,7 @@ ExtensionLoader 类似 JDK 标准 SPI 里面的 ServiceLoader 类，代码 `Exte
 
 #### ExtensionLoader.getAdaptiveExtension 动态生成扩展接口的适配器类
 
-![]()
+![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/extensionloader.png)
 
 (1)获取当前扩展接口对应的 ExtensionLoader 对象，在 Dubbo 中每个扩展接口对应着自己的 ExtensionLoader 对象，如下代码，内部通过并发 Map 来缓存扩展接口与对应的 
 ExtensionLoader 的映射，其中 key 为扩展接口的 Class 对象，value 为对应的 ExtensionLoader 实例, 第一次访问某个扩展接口时候需要 new 一个对应的 ExtensionLoader 放入缓存，后面就直接从缓存获取：
@@ -315,5 +315,114 @@ private T injectExtension(T instance) {
         return instance;
     }
 ```
+
+### Dubbo增强 SPI 中扩展点自动包装的实现原理
+
+在 Spring AOP 中我们可以使用多个切面对指定类的方法进行增强，在 Dubbo 中也提供了类似的功能，在 Dubbo 中你可以指定多个 Wrapper 类对指定的扩展点的实现类的方法进行增强。
+
+适配器 Protocol$Adaptive 的 export 方法，如果 URL 对象里面的 protocol 为 dubbo，那么在没有扩展点自动包装时，protocol.export 返回的就是 DubboProtocol 的对象。
+``` 
+Exporter<?> exporter = protocol.export(wrapperInvoker);
+```
+真正情况下 Dubbo 里面使用了 ProtocolFilterWrapper、ProtocolListenerWrapper 等 Wrapper 类对 DubboProtocol 对象进行了包装增强。
+
+这里典型的用到了装饰器模式， ProtocolFilterWrapper、ProtocolListenerWrapper、DubboProtocol 三个类都有一个拷贝构造函数，这个拷贝构造函数的参数就是扩展接口 
+Protocol，所谓包装是指下面意思：
+``` 
+public class XxxProtocolWrapper implemenets Protocol {
+  private Protocol impl;
+  public XxxProtocol(Protocol protocol) { 
+       impl = protocol; 
+  }
+
+ public void export() {
+ //... 在调用DubboProtocol的export前做些事情
+   impl.export();
+ //... 在调用DubboProtocol的export后做些事情
+ }
+ ...
+}
+```
+
+下面我们看下 Dubbo 增强的 SPI 中如何去收集的这些包装类，以及如何实现的使用包装类对 SPI 实现类的自动包装。
+
+在生成适配器类的时序图步骤(5)getExtensionClasses 里面的 loadFile 方法除了加载扩展接口的所有实现类的 Class 对象外还对包装类（wrapper类）进行了收集，具体代码如下：
+``` 
+ private void loadFile(Map<String, Class<?>> extensionClasses, String dir) {
+        String fileName = dir + type.getName();
+        try {
+            ...
+            if (urls != null) {
+                while (urls.hasMoreElements()) {
+                    java.net.URL url = urls.nextElement();
+                    try {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream(), "utf-8"));
+                        try {
+                            String line = null;
+                            while ((line = reader.readLine()) != null) {
+                                ...
+                                if (line.length() > 0) {
+                                    try {
+                                        ...
+                                        if (line.length() > 0) {
+                                            ...
+                                         } else {
+                                                 //（I）这里判断SPI实现类是否有扩展接口为参数的拷贝构造函数
+                                                try {
+                                                    clazz.getConstructor(type);
+                                                    Set<Class<?>> wrappers = cachedWrapperClasses;
+                                                    if (wrappers == null) {
+                                                        cachedWrapperClasses = new ConcurrentHashSet<Class<?>>();
+                                                        wrappers = cachedWrapperClasses;
+                                                    }
+                                                    wrappers.add(clazz);
+                                                } catch (NoSuchMethodException e) {
+                                                 ...
+                                                }
+                                            }
+                                        }
+                                    } catch (Throwable t) {
+                                       ...
+                                    }
+                                }
+                            } // end of while read lines
+                        } finally {
+                            reader.close();
+                        }
+                    } catch (Throwable t) {
+                     ...
+                    }
+                } // end of while urls
+            }
+        } catch (Throwable t) {
+            ...
+        }
+    }
+```
+
+如上代码（I）处调用 clazz.getConstructor(type)，这里是判断 SPI 实现类 clazz 是否有扩展接口 type 为参数的拷贝构造函数，如果没有直接抛异常 NoSuchMethodException，该异常被 catch 掉了，如果有则说明 clazz 类为 wrapper 类，则收集起来放入到 cachedWrapperClasses 集合，到这里 wrapper 类的收集已经完毕。
+
+而具体对扩展实现类使用收集的 wrapper 类进行自动包装是在 createExtension 方法里做的：
+
+``` 
+private T createExtension(String name) {
+    ...
+    try {
+
+        //cachedWrapperClasses里面有元素，即为wrapper类
+        Set<Class<?>> wrapperClasses = cachedWrapperClasses;
+        if (wrapperClasses != null && wrapperClasses.size() > 0) {
+            //使用循环一层层对包装类进行包装，可以参考上面讲解的使用ProtocolFilterWrapper、ProtocolListenerWrapper对DubboProtocol进行包装的流程
+            for (Class<?> wrapperClass : wrapperClasses) {
+                instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
+            }
+        }
+        return instance;
+    } catch (Throwable t) {
+        ...
+    }
+}
+```
 ### 参考资料
 - [JDK SPI机制详解](https://juejin.im/post/5af952fdf265da0b9e652de3)
+- [Dubbo SPI 机制和IOC](https://segmentfault.com/a/1190000014698351)
