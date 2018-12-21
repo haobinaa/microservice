@@ -138,16 +138,16 @@ ExtensionLoader 类似 JDK 标准 SPI 里面的 ServiceLoader 类，代码 `Exte
      public com.alibaba.dubbo.rpc.Exporter export(com.alibaba.dubbo.rpc.Invoker arg0)
              throws com.alibaba.dubbo.rpc.RpcException {
          ...
-         //(1)
+         //(1) 获取参数中的URL
          com.alibaba.dubbo.common.URL url = arg0.getUrl();
          String extName = (url.getProtocol() == null ? "dubbo" : url.getProtocol());
          if (extName == null)
              throw new IllegalStateException("Fail to get extension(com.alibaba.dubbo.rpc.Protocol) name from url("
                      + url.toString() + ") use keys([protocol])");
-         //(2)
+         //(2) 根据名称获取Protocol的实现类
          com.alibaba.dubbo.rpc.Protocol extension = (com.alibaba.dubbo.rpc.Protocol) ExtensionLoader
                  .getExtensionLoader(com.alibaba.dubbo.rpc.Protocol.class).getExtension(extName);
-         //(3)
+         //(3) 调用实现类的export(invoker)方法
          return extension.export(arg0);
      }
  }
@@ -155,6 +155,165 @@ ExtensionLoader 类似 JDK 标准 SPI 里面的 ServiceLoader 类，代码 `Exte
 
 所以当我们调用 protocol.export(invoker) 方法的时候实际调用的是动态生成的 Protocol$Adaptive 实例的 export(invoker) 方法，其内部代码（1）首先获取参数里面的 URL 对象，然后从 URL 对象里面获取用户设置的 Protocol 的实现类的名称，然后调用代码（2）根据名称获取具体的 Protocol 协议的实现类（后面我们会知道获取的是实现类被使用 Wrapper 类增强后的类），最后代码（3）具体调用 Protocol 协议的实现类的 export(invoker) 方法。
 
+配器类的存在目的就相当一个分发器，根据不同的参数，委托不同的实现类来做指定的事情，Dubbo 实现上是把所有的参数封装到一 URl 对象里面，包含用户配置的参数，比如设置使用什么协议。另外这里也可以知道 Dubbo 并没有一次性加载所有扩展接口 Protocol 的实现类，而是根据 URL 里面协议类型只加载当前使用的扩展实现类
 
+#### ExtensionLoader.getAdaptiveExtension 动态生成扩展接口的适配器类
+
+![]()
+
+(1)获取当前扩展接口对应的 ExtensionLoader 对象，在 Dubbo 中每个扩展接口对应着自己的 ExtensionLoader 对象，如下代码，内部通过并发 Map 来缓存扩展接口与对应的 
+ExtensionLoader 的映射，其中 key 为扩展接口的 Class 对象，value 为对应的 ExtensionLoader 实例, 第一次访问某个扩展接口时候需要 new 一个对应的 ExtensionLoader 放入缓存，后面就直接从缓存获取：
+``` 
+public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
+        if (type == null)
+            throw new IllegalArgumentException("Extension type == null");
+        if (!type.isInterface()) {
+            throw new IllegalArgumentException("Extension type(" + type + ") is not interface!");
+        }
+        if (!withExtensionAnnotation(type)) {
+            throw new IllegalArgumentException("Extension type(" + type +
+                    ") is not extension, because WITHOUT @" + SPI.class.getSimpleName() + " Annotation!");
+        }
+        // 如果缓存中有直接从缓存中获取
+        ExtensionLoader<T> loader = (ExtensionLoader<T>) EXTENSION_LOADERS.get(type);
+        if (loader == null) {
+        // 缓存中没有则放入缓存
+            EXTENSION_LOADERS.putIfAbsent(type, new ExtensionLoader<T>(type));
+            loader = (ExtensionLoader<T>) EXTENSION_LOADERS.get(type);
+        }
+        return loader;
+    }
+    
+// ==================映射关系
+ private static final ConcurrentMap<Class<?>, ExtensionLoader<?>> EXTENSION_LOADERS = new ConcurrentHashMap<Class<?>, ExtensionLoader<?>>();    
+```
+
+
+(2) 取当前扩展接口对应的适配器对象，内部是首先获取该扩展接口所有实现类的 Class 对象（注意，这里获取的是 Class 对象，并不是对象实例）:
+``` 
+ @SuppressWarnings("unchecked")
+    public T getAdaptiveExtension() {
+        Object instance = cachedAdaptiveInstance.get();
+        if (instance == null) {
+            if (createAdaptiveInstanceError == null) {
+                synchronized (cachedAdaptiveInstance) {
+                    instance = cachedAdaptiveInstance.get();
+                    if (instance == null) {
+                        try {
+                            instance = createAdaptiveExtension();
+                            cachedAdaptiveInstance.set(instance);
+                        } catch (Throwable t) {
+                            createAdaptiveInstanceError = t;
+                            throw new IllegalStateException("fail to create adaptive instance: " + t.toString(), t);
+                        }
+                    }
+                }
+            } else {
+                throw new IllegalStateException("fail to create adaptive instance: " + createAdaptiveInstanceError.toString(), createAdaptiveInstanceError);
+            }
+        }
+
+        return (T) instance;
+}
+```
+这里使用使用双重检查创建 cachedAdaptiveInstance 对象，接口对应的适配器对象就保存到了这个对象里面。
+
+
+(3) `createAdaptiveExtension`方法具体创建适配器对象
+``` 
+    private T createAdaptiveExtension() {
+        try {
+            return injectExtension((T) getAdaptiveExtensionClass().newInstance());
+        } catch (Exception e) {
+            throw new IllegalStateException("Can not create adaptive extension " + type + ", cause: " + e.getMessage(), e);
+        }
+    }
+```
+可知首先调用了步骤（4）getAdaptiveExtensionClass().newInstance() 获取适配器对象的一个实例，然后调用步骤（7）injectExtension 方法进行扩展点相互依赖注入。
+
+(4)getAdaptiveExtensionClass() 动态生成适配器类的 Class 对象
+``` 
+    private Class<?> getAdaptiveExtensionClass() {
+        getExtensionClasses();
+        if (cachedAdaptiveClass != null) {
+            return cachedAdaptiveClass;
+        }
+        return cachedAdaptiveClass = createAdaptiveExtensionClass();
+    }
+```
+
+如上代码首先调用了步骤（5）getExtensionClasses 获取了该扩展接口所有实现类的 Class 对象，然后调用了步骤（6）createAdaptiveExtensionClass 创建具体的适配器对象的 Class 对象，createAdaptiveExtensionClass 代码如下：
+``` 
+ private Class<?> createAdaptiveExtensionClass() {
+        String code = createAdaptiveExtensionClassCode();
+        ClassLoader classLoader = findClassLoader();
+        com.alibaba.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(com.alibaba.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
+        return compiler.compile(code, classLoader);
+    }
+```
+其中 createAdaptiveExtensionClassCode 方法是关键，该方法根据扩展接口生成其对应的适配器类的字符串代码，这里是根据 protocol 接口的代码生成对应的 Protocol$Adaptive 的字符串代码存放到变量 code 中，然后默认调用 JavassistCompiler 的 compile(code, classLoader) 根据字符串代码生成适配器的 Class 对象并返回，然后通过 getAdaptiveExtensionClass().newInstance() 创建适配器类的一个对象实例。至此扩展接口的适配器对象已经创建完毕。
+
+(5) getExtensionClasses 加载扩展接口的所有实现， 内部最终调用了loadExtensionClasses :
+``` 
+    private Map<String, Class<?>> loadExtensionClasses() {
+       //获取扩展接口上SPI注解
+        final SPI defaultAnnotation = type.getAnnotation(SPI.class);
+        //是否存在注解
+        if (defaultAnnotation != null) {
+            String value = defaultAnnotation.value();
+            if (value != null && (value = value.trim()).length() > 0) {
+                String[] names = NAME_SEPARATOR.split(value);
+                if (names.length > 1) {
+                    throw new IllegalStateException("more than 1 default extension name on extension " + type.getName()
+                            + ": " + Arrays.toString(names));
+                }
+                //默认实现类的名称放到cachedDefaultName
+                if (names.length == 1) cachedDefaultName = names[0];
+            }
+        }
+        //在指定目录的jar里面查找扩展点
+        Map<String, Class<?>> extensionClasses = new HashMap<String, Class<?>>();
+        loadFile(extensionClasses, DUBBO_INTERNAL_DIRECTORY);//META-INF/dubbo/internal/
+        loadFile(extensionClasses, DUBBO_DIRECTORY);//META-INF/dubbo/
+        loadFile(extensionClasses, SERVICES_DIRECTORY);//META-INF/services/
+        return extensionClasses;
+}
+```
+拿 Protocol 协议来说，这里 SPI 注解为 @SPI("dubbo")，那么这里 cachedDefaultName 就是 Dubbo。然后 META-INF/dubbo/internal/、META-INF/dubbo/、META-INF/services/ 目录下去加载具体的扩展实现类
+
+（7）injectExtension 方法进行扩展点实现类相互依赖自动注入：
+``` 
+private T injectExtension(T instance) {
+        try {
+            if (objectFactory != null) {
+                //遍历扩展点实现类所有的方法
+                for (Method method : instance.getClass().getMethods()) {
+                   //当前方法是public的set方法，并且只有一个入参
+                    if (method.getName().startsWith("set")
+                            && method.getParameterTypes().length == 1
+                            && Modifier.isPublic(method.getModifiers())) {
+                        //获取参数类型
+                        Class<?> pt = method.getParameterTypes()[0];
+                        try {
+                            String property = method.getName().length() > 3 ? method.getName().substring(3, 4).toLowerCase() + method.getName().substring(4) : "";
+                           //看set方法设置的变量是不是扩展接口
+                            Object object = objectFactory.getExtension(pt, property);
+                            //如果是则反射调用set方法
+                            if (object != null) {
+                                method.invoke(instance, object);
+                            }
+                        } catch (Exception e) {
+                            logger.error("fail to inject via method " + method.getName()
+                                    + " of interface " + type.getName() + ": " + e.getMessage(), e);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+        return instance;
+    }
+```
 ### 参考资料
 - [JDK SPI机制详解](https://juejin.im/post/5af952fdf265da0b9e652de3)
