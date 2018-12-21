@@ -188,8 +188,17 @@ consumer代码:
 ### 远程调用概述
 
 #### 暴露一个服务过程
+
 ![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/dubbo_rpc.png)
 
+- 首先 ServiceConfig 类拿到对外提供服务的实际类 ref（如：UserServiceImpl），然后通过 ProxyFactory 类的 getInvoker 方法使用 ref 生成一个 AbstractProxyInvoker 实例，到这一步就完成了具体服务到 Invoker 的转化。接下来就是 Invoker 转换到 Exporter 的过程。Dubbo 处理服务暴露的关键就在 Invoker 转换到 Exporter 的过程，上图中的红色部分
+
+- Dubbo 协议的 Invoker 转为 Exporter 发生在 DubboProtocol 类的 export 方法中，它主要是创建一个 Netty Server 侦听服务，并接收客户端发来的各种请求，通讯细节由 Dubbo 自己实现，然后注册服务到服务注册中心
+
 #### 消费一个服务
+
 ![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/dubbo_rpc_consumer.png)
 
+- 首先 ReferenceConfig 类的 init 方法调用 Protocol 的 refer 方法生 成 Invoker 实例（如上图中的红色部分），这是服务消费的关键。接下来把 Invoker 转换为客户端需要的接口（如：UserServiceBo）
+
+- Dubbo 协议的 invoker 转换为客户端需要的接口，发生在 DubboProtocol 的 refer 方法中，它主要创建一个 netty client 链接服务提供者，通讯细节由 Dubbo 自己实现
