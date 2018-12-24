@@ -122,4 +122,18 @@ Dubbo 提供了多种均衡策略，默认为 random ，也就是每次随机调
 
 ##### hash倾斜
 
+一致性hash可以做到每个服务器都进行处理请求，但是不能保证每个服务器处理的请求的数量大致相同， 比如下图：
+
+![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/hash_dip.png)\
+
+服务器 ip1、ip2、ip3 经过 Hash 后落到了一致性 Hash 环上，从图中 Hash 值分布可知 ip1 会负责处理大概80%的请求，而 ip2 和 ip3 则只会负责处理大概20%的请求，虽然三个机器都在处理请求，但是明显每个机器的负载不均衡，这样称为一致性 Hash 的倾斜
+
 ##### 虚拟节点
+
+虚拟节点就是为了解决上述hash倾斜的问题，如图
+
+![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/virtual_node.png)
+
+其中 ip1-1 是 ip1 的虚拟节点，ip2-1 是 ip2 的虚拟节点，ip3-1 是 ip3 的虚拟节点。
+
+可知当物理机器数目为 M，虚拟节点为 N 的时候，实际 Hash 环上节点个数为 M*（N+1）。比如当客户端计算的 Hash 值处于 ip2 和 ip3 或者处于 ip2-1 和 ip3-1 之间时候使用 ip3 服务器进行处理。
