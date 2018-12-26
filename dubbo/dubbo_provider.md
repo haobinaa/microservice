@@ -223,6 +223,237 @@ private void doExportUrls() {
 ```
 
 
+(2) 如果 `dubbo:service` 有 `dubbo:method` 子标签，则 `dubbo:method `以及其子标签的配置属性，都存入到 Map 中，属性名称加上对应的方法名作为前缀。`dubbo:method` 的子标签 `dubbo:argument`，其键为`方法名.参数序号`
+``` 
+// 如果有子标签method
+ if (methods != null && methods.size() > 0) {
+            for (MethodConfig method : methods) {
+                appendParameters(map, method, method.getName());
+                String retryKey = method.getName() + ".retry";
+                if (map.containsKey(retryKey)) {
+                    String retryValue = map.remove(retryKey);
+                    if ("false".equals(retryValue)) {
+                        map.put(method.getName() + ".retries", "0");
+                    }
+                }
+                List<ArgumentConfig> arguments = method.getArguments();
+                if (arguments != null && arguments.size() > 0) {
+                    for (ArgumentConfig argument : arguments) {
+                        // convert argument type
+                        if (argument.getType() != null && argument.getType().length() > 0) {
+                            Method[] methods = interfaceClass.getMethods();
+                            // visit all methods
+                            if (methods != null && methods.length > 0) {
+                                for (int i = 0; i < methods.length; i++) {
+                                    String methodName = methods[i].getName();
+                                    // target the method, and get its signature
+                                    if (methodName.equals(method.getName())) {
+                                        Class<?>[] argtypes = methods[i].getParameterTypes();
+                                        // one callback in the method
+                                        if (argument.getIndex() != -1) {
+                                            if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
+                                                appendParameters(map, argument, method.getName() + "." + argument.getIndex());
+                                            } else {
+                                                throw new IllegalArgumentException("argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
+                                            }
+                                        } else {
+                                            // multiple callbacks in the method
+                                            for (int j = 0; j < argtypes.length; j++) {
+                                                Class<?> argclazz = argtypes[j];
+                                                if (argclazz.getName().equals(argument.getType())) {
+                                                    appendParameters(map, argument, method.getName() + "." + j);
+                                                    if (argument.getIndex() != -1 && argument.getIndex() != j) {
+                                                        throw new IllegalArgumentException("argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (argument.getIndex() != -1) {
+                            appendParameters(map, argument, method.getName() + "." + argument.getIndex());
+                        } else {
+                            throw new IllegalArgumentException("argument config must set index or type attribute.eg: <dubbo:argument index='0' .../> or <dubbo:argument type=xxx .../>");
+                        }
+
+                    }
+                }
+            } // end of methods for
+        }
+```
+
+
+(3) 添加 methods 键值对，存放 `dubbo:service` 的所有方法名，多个方法名用 , 隔开，如果是泛化实现，填充 `genric=true`, methods 为 `*`。
+``` 
+if (ProtocolUtils.isGeneric(generic)) {
+        map.put(Constants.GENERIC_KEY, generic);
+        map.put(Constants.METHODS_KEY, Constants.ANY_VALUE);
+    } else {
+        String revision = Version.getVersion(interfaceClass, version);
+        if (revision != null && revision.length() > 0) {
+            map.put("revision", revision);
+        }
+
+        String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
+        if (methods.length == 0) {
+            logger.warn("NO method found in service interface " + interfaceClass.getName());
+            map.put(Constants.METHODS_KEY, Constants.ANY_VALUE);
+        } else {
+            map.put(Constants.METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
+        }
+}
+```
+
+(4) 根据是否开启令牌机制，如果开启，设置 token 键，值为静态值或 uuid
+``` 
+if (!ConfigUtils.isEmpty(token)) {
+    if (ConfigUtils.isDefault(token)) {
+        map.put(Constants.TOKEN_KEY, UUID.randomUUID().toString());
+    } else {
+        map.put(Constants.TOKEN_KEY, token);
+    }
+}
+```
+
+(5) 如果协议为本地协议（ injvm ），则设置 protocolConfig#register 属性为 false ，表示不向注册中心注册服务，在 map 中存储键为 notify，值为 false，表示当注册中心监听到服务提供者发生变化（服务提供者增加、服务提供者减少等）事件时不通知。
+``` 
+ if (Constants.LOCAL_PROTOCOL.equals(protocolConfig.getName())) {
+            protocolConfig.setRegister(false);
+            map.put("notify", "false");
+}
+```
+
+(6) 设置协议的 contextPath，如果未配置，默认为 /interfacename
+``` 
+String contextPath = protocolConfig.getContextpath();
+if ((contextPath == null || contextPath.length() == 0) && provider != null) {
+    contextPath = provider.getContextpath();
+}
+```
+
+(7) 解析服务提供者的Ip地址与端口
+``` 
+String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
+Integer port = this.findConfigedPorts(protocolConfig, name, map);
+```
+
+findConfigedPorts:
+``` 
+    private Integer findConfigedPorts(ProtocolConfig protocolConfig, String name, Map<String, String> map) {
+        Integer portToBind = null;
+
+        // parse bind port from environment
+        String port = getValueFromConfig(protocolConfig, Constants.DUBBO_PORT_TO_BIND);
+        portToBind = parsePort(port);
+
+        // if there's no bind port found from environment, keep looking up.
+        if (portToBind == null) {
+            portToBind = protocolConfig.getPort();
+            if (provider != null && (portToBind == null || portToBind == 0)) {
+                portToBind = provider.getPort();
+            }
+            final int defaultPort = ExtensionLoader.getExtensionLoader(Protocol.class).getExtension(name).getDefaultPort();
+            if (portToBind == null || portToBind == 0) {
+                portToBind = defaultPort;
+            }
+            if (portToBind == null || portToBind <= 0) {
+                portToBind = getRandomPort(name);
+                if (portToBind == null || portToBind < 0) {
+                    portToBind = getAvailablePort(defaultPort);
+                    putRandomPort(name, portToBind);
+                }
+                logger.warn("Use random available port(" + portToBind + ") for protocol " + name);
+            }
+        }
+
+        // save bind port, used as url's key later
+        map.put(Constants.BIND_PORT_KEY, String.valueOf(portToBind));
+
+        // registry port, not used as bind port by default
+        String portToRegistryStr = getValueFromConfig(protocolConfig, Constants.DUBBO_PORT_TO_REGISTRY);
+        Integer portToRegistry = parsePort(portToRegistryStr);
+        if (portToRegistry == null) {
+            portToRegistry = portToBind;
+        }
+
+        return portToRegistry;
+    }
+```
+
+
+(8) 根据协议名称、协议 host、协议端口、contextPath、相关配置属性（application、module、provider、protocolConfig、service 及其子标签）构建服务提供者URI。
+``` 
+URL url = new URL(name, host, port, (contextPath == null || contextPath.length() == 0 ? "" : contextPath + "/") + path, map);
+
+if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
+        .hasExtension(url.getProtocol())) {
+    url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
+            .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
+}
+```
+
+(9) 构建Invoker实例
+``` 
+  String scope = url.getParameter(Constants.SCOPE_KEY);
+        // don't export when none is configured
+        if (!Constants.SCOPE_NONE.equalsIgnoreCase(scope)) {
+            // 如果socope不为remote， 则先在本地暴露(injvm)
+            if (!Constants.SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+                exportLocal(url);
+            }
+           // 如果scope不为local， 则将服务暴露在远程
+            if (!Constants.SCOPE_LOCAL.equalsIgnoreCase(scope)) {
+                if (logger.isInfoEnabled()) {
+                    logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
+                }
+                // 检测当前配置的注册中心， 如果注册中心不为空则遍历注册中心， 将服务依次在注册中心注册
+                if (registryURLs != null && !registryURLs.isEmpty()) { 
+                    for (URL registryURL : registryURLs) {
+                        // 如果dubbo:service的dynamic属性未配置， 则尝试获取dubbo:registry的dynamic
+                        // 该属性的作用是否启用动态注册
+                        url = url.addParameterIfAbsent(Constants.DYNAMIC_KEY, registryURL.getParameter(Constants.DYNAMIC_KEY));
+                        // 根据注册中心URL，构建监控中心的URL，如果监控中心URL不为空，则在服务提供者URL上追加 monitor，其值为监控中心URL
+                        URL monitorUrl = loadMonitor(registryURL); 
+                        if (monitorUrl != null) {
+                            url = url.addParameterAndEncoded(Constants.MONITOR_KEY, monitorUrl.toFullString());
+                        }
+                        if (logger.isInfoEnabled()) {
+                            logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
+                        }
+
+                        // For providers, this is used to enable custom proxy to generate invoker
+                        String proxy = url.getParameter(Constants.PROXY_KEY);
+                        if (StringUtils.isNotEmpty(proxy)) {
+                            registryURL = registryURL.addParameter(Constants.PROXY_KEY, proxy);
+                        }
+                        // 通过动态代理机制创建 Invoker，Dubbo的远程调用实现类（重点） ！！！
+                        Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(Constants.EXPORT_KEY, url.toFullString())); 
+                        DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+                        // 将调用 RegistryProtocol#export 方法。
+                        Exporter<?> exporter = protocol.export(wrapperInvoker);
+                        exporters.add(exporter);
+                    }
+                } else {
+                    Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
+                    DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+                    Exporter<?> exporter = protocol.export(wrapperInvoker);
+                    exporters.add(exporter);
+                }
+            }
+}
+```
+
+
+
+
+
+
+
+
+
+
 
 ### 参考资料
 - [Dubbo核心源码： 服务端启动流程](https://juejin.im/post/5bcee9696fb9a05cda77a3da)
