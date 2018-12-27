@@ -34,5 +34,5 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
 
 #### kubernetes
 - [容器基础原理](https://github.com/haobinaa/microservice/blob/master/k8s/container.md)
-- [k8s基础原理和集群部署](https://github.com/haobinaa/microservice/blob/master/k8s/k8s.md)
+- [k8s基础原理和集群部署(单机集群国内可用)](https://github.com/haobinaa/microservice/blob/master/k8s/k8s.md)
 

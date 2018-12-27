@@ -79,13 +79,114 @@ kubeadm生成bootstrap token之后， 就可以在任意一台安装了kubelet�
 
 
 
+### 单机安装kubernetes集群示例
+准备工作：
+- 关闭swap， k8s禁用swap`sudo swapoff -a`
+- 编写配置， `vim /etc/sysctl.d/k8s.conf`:
+``` 
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1    
+vm.swappiness=0
+```
+运行`sysctl --system`使之生效
+
+- 配置kubernetes yum源， `vim  /etc/yum.repos.d/kubernetes.repo` :
+``` 
+[kubernetes]
+name=kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+gpgcheck=0
+enable=1
+```
+这一步是为了yum安装 kubectl, kubeadm, kubelet
 
 
 
+(1) 安装kubeadm
+
+这里使用的是kubeadm`1.11.0版本`， kubernetes也使用`1.11.0版本`
+
+```
+yum install -y kubelet-1.11.0 kubeadm-1.11.0 kubectl-1.11.0 docker
+```
 
 
+(2) 下载kubernetes镜像 
+
+由于kubernetes镜像托管在了google云上， 找了个国内大神提供的镜像， 编辑镜像脚本 `vim pullimage.sh`:
+``` 
+#!/bin/bash
+images=(kube-proxy-amd64:v1.11.1 kube-scheduler-amd64:v1.11.1 kube-controller-manager-amd64:v1.11.1
+kube-apiserver-amd64:v1.11.1 etcd-amd64:3.2.18 coredns:1.1.3 pause:3.1 )
+for imageName in ${images[@]} ; do
+docker pull anjia0532/google-containers.$imageName
+docker tag anjia0532/google-containers.$imageName k8s.gcr.io/$imageName
+docker rmi anjia0532/google-containers.$imageName
+done
+```
+
+由于kubernetes集群不允许开启swap， 配置忽略这个错误: 
+``` 
+vim /etc/sysconfig/kubelet
+
+# /etc/sysconfig/kubelet
+KUBELET_EXTRA_ARGS="--fail-swap-on=false"
+```
+
+(3) 编写kubeadm Matser配置文件， 初始化Master
+ 
+ kubeadm.yaml:
+``` 
+apiVersion: kubeadm.k8s.io/v1alpha1
+kind: MasterConfiguration
+controllerManagerExtraArgs:
+  horizontal-pod-autoscaler-use-rest-clients: "true"
+  horizontal-pod-autoscaler-sync-period: "10s"
+  node-monitor-grace-period: "10s"
+apiServerExtraArgs:
+  runtime-config: "api/all=true"
+kubernetesVersion: "v1.11.1"
+```
+
+初始化指令:
+``` 
+kubeadm init --config kubeadm.yaml
+```
+
+这样Master的部署就完成了， 成功后kubeadm会生成一行指令：
+``` 
+kubeadm join your ip:6443 --token 00bwbx.uvnaa2ewjflwu1ry --discovery-token-ca-cert-hash 
+sha256:00eb62a2a6020f94132e3fe1ab721349bbcd3e9b94da9654cfe15f2985ebd711
+```
+这行指定在部署后面的Worker Node的时候会用到， 最好先记下来
 
 
+实在是忘了记， 可以使用`kubeadm token create --print-join-command`重新生成连接Token并打印输出命令
+
+(4) 配置kubectl和apiserver的认证
+``` 
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+Kubernetes 集群默认需要加密方式访问, 这几条命令是把刚刚部署生成的kubernetes集群的安全配置文件保存到当前用户的.kube目录下， kubectl默认会使用这个目录下的授权信息访问kubernetes集群。
+
+如果不这么做， 我们每次都要通过 export KUBECONFIG 环境变量告诉kubectl 这个安全配置文件的位置
+
+
+#### 集群常用操作 
+
+(1) kubectl get nodes,  查看节点状态
+
+(2) kubectl describe node <node-name>, 查看某node对象的详细信息、状态和时间 
+
+(3) 部署网络插件 `Weave`
+``` 
+kubectl apply -f https://git.io/weave-kube-1.6
+```
+
+检查系统Pod的状态:`kubectl get pods -n kube-system`, 可以看到所有系统的pod都启动了(之前coredns和weave是pending的状态)
 
 
 
