@@ -175,6 +175,44 @@ Kubernetes 集群默认需要加密方式访问, 这几条命令是把刚刚部�
 如果不这么做， 我们每次都要通过 export KUBECONFIG 环境变量告诉kubectl 这个安全配置文件的位置
 
 
+#### Taint/Toleration调整Master执行Pod策略
+
+默认情况下Master节点是不允许运行用户Pod， kubernetes可以通过Taint/Toleration机制， 做到这一点。
+
+它的原理是： 一旦某个节点被加上了一个Taint， 即被打上了一个污点， 那么所有的Pod就都不能在这个节点运行， 除非有个别Pod声明自己能"容忍"这个污点(Taint), 即声明了`Toleration`才可以在这个节点上运行。
+
+打污点(Taint)：
+``` 
+kubectl taint nodes node1 foo=bar:NoSchedule
+```
+这时， node1节点上会增加一个键值对格式的Taint`foo=bar:NoSchedule`， 值里面的NoShchedule意味着这个Taint只会在调度新Pod时产生作用， 而不会影响已经在node1上运行的Pod。
+
+
+声明容忍(Toleration)， 在Pod的spec部分加入tolerations字段即可：
+``` 
+apiVersion: v1
+kind: Pod
+...
+spec:
+  tolerations:
+  - key: "foo"
+    operator: "Equal"
+    value: "bar"
+    effect: "NoSchedule"
+```
+这个配置的含义是， 这个Pod能容忍所有键值对为foo=bar的Taint, 注意operator的值是`Equal`； 如过改为`Exists`，则它的含义是， 该Pod能够容忍所有以foo为键的Taint。
+
+删除Taint： `kubectl taint nodes --all node-role.kubernetest.io.master-`(后面有个短线)， 这个代表着删除所有以`node-role.kubernetes
+.io/master`为键的Taint
+
+#### 安装可视化插件
+
+todo
+
+#### 安装存储插件
+
+todo
+
 #### 集群常用操作 
 
 (1) kubectl get nodes,  查看节点状态
@@ -188,5 +226,7 @@ kubectl apply -f https://git.io/weave-kube-1.6
 
 检查系统Pod的状态:`kubectl get pods -n kube-system`, 可以看到所有系统的pod都启动了(之前coredns和weave是pending的状态)
 
+(4) kubectl describe pod -n kube-system , 查看集群所有pod
 
+(5) kubectl get pods --all-namespaces, 查看全部节点
 
