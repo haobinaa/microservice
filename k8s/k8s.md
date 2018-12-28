@@ -207,7 +207,15 @@ spec:
 
 #### 安装可视化插件
 
-todo
+新建下载镜像脚本, `vim pulldashboard.sh`:
+``` 
+docker pull anjia0532/google-containers.kubernetes-dashboard-amd64:v1.10.0
+docker tag  anjia0532/google-containers.kubernetes-dashboard-amd64:v1.10.0   k8s.gcr.io/kubernetes-dashboard-amd64:v1.10.0
+docker rmi  anjia0532/google-containers.kubernetes-dashboard-amd64:v1.10.0 
+```
+
+安装:`kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v1.10.1/src/deploy/recommended/kubernetes-dashboard.yaml`
+
 
 #### 安装存储插件
 
