@@ -53,6 +53,16 @@ spec:
  (不显示声明宿主机目录的Volume)，所以kubernetes也会在宿主机上创建一个临时目录，这个目录将会被绑定到容器所声明的目录上。Pod容器中， 使用的是`volumeMounts`字段来声明自己要挂载哪个volume， 
  并通过mountPath字段来定义容器内的volume目录。
  
+ kubernetes也提供了显示的volume定义，如下:
+ ``` 
+  ...   
+     volumes:
+       - name: nginx-vol
+         hostPath: 
+           path: /var/data
+ ```
+ 这种声明方式容器volume挂载的宿主机目录就变成了`/var/data`
+ 
  #### 运行容器
  
  可以通过`kubectl create -f nginx-deployment.yaml`将上述文件运行起来。
@@ -65,6 +75,10 @@ spec:
 
 让API对象做了修改，比如镜像升级， 需要运行`kubectl replace -f nginx-deployment.yaml`来更新
 
+通过`kubectl exec -it pod-name -- /bin/bash`进入Pod当中
+
+通过`kubectl delete -f nginx-deployment.yaml`来删除这个Pod
+
 #### 声明式API管理k8s镜像
 
 前面的内容使用 create、replace等操作来创建、更新对象， kubernetes推荐的是用"声明式 API"来管理，  如下:
@@ -75,3 +89,4 @@ kubectl apply -f nginx-deployment.yaml
 kubectl apply -f nginx-deployment.yaml
 ```
 作为用户不用关心是创建还是更新， 执行的命令始终是`kubectl apply`， 而kubernetes会根据YAML文件的内容变化自动处理
+
