@@ -97,3 +97,189 @@ spec:
 4. Failed，这个状态下Pod至少有一个容器以不正常的状态(非0的返回码)退出。这个状态意味着需要Debug这个容器的应用，decribe一下这个Pod的Event日志
 
 5. Unknown， 这个状态意味着Pod的状态不能持续的被kubelet汇报给kube-apiserver，很可能是主从节点之间的通信出现了问题
+
+### Pod和container的关系
+
+#### 数据卷投影(project volume)
+
+这是一种特殊的volume， 它们存在意义不是为了存放容器里面的数据，也不是用来进行容器和宿主机之间的数据交换。这些volume的作用是为容器提供预先定义好的数据，仿佛是被kubernetes投影(project)
+进容器的。所以叫做project volume， 目前一共有四种project volume:
+1. Secret
+2. ConfigMap
+3. Downward API
+4. ServiceAccountToken
+
+
+##### Secret
+以Secret为例， 它的作用是把Pod想要访问的加密数据，存放到Etcd中，然后就可以通过在Pod容器里挂载volume的方式访问secret里保存的信息了。
+
+secret的典型场景就是保存数据的credential信息, pod(`test-project-volume.yaml`)定义如下：
+``` 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-projected-volume 
+spec:
+  containers:
+  - name: test-secret-volume
+    image: busybox
+    args:
+    - sleep
+    - "86400"
+    volumeMounts:
+    - name: mysql-cred
+      mountPath: "/projected-volume"
+      readOnly: true
+  volumes:
+  - name: mysql-cred
+    projected:
+      sources:
+      - secret:
+          name: user
+      - secret:
+          name: pass
+```
+上述的pod声明的volume并不是emptyDir或hostPath，而是projected类型。这个volume的数据来源(sources)是名为user和pass的secret对象，分别对应数据库的用户名和密码。
+
+(1) 创建secret对象
+`kubectl create secret`创建：
+``` 
+有如下文件:
+$ cat ./username.txt
+admin
+$ cat ./password.txt
+c1oudc0w!
+
+$ kubectl create secret generic user --from-file=./username.txt
+$ kubectl create secret generic pass --from-file=./password.txt
+
+```
+username和password存放了用户名和密码，user和pass是为secret对象指定的名字。现在可以通过`kubect get secrete`查看secret对象:
+``` 
+$ kubectl get secrets
+NAME           TYPE                                DATA      AGE
+user          Opaque                                1         51s
+pass          Opaque                                1         51s
+```
+
+
+通过YAML文件创建Secrete对象:
+```
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+type: Opaque
+data:
+  user: YWRtaW4=
+  pass: MWYyZDFlMmU2N2Rm 
+```
+
+
+
+(2) 创建Pod
+`kubectl create -f test-project-volume.yaml`
+
+Pod状态变为Running后，进入pod可以看到(secret要求对象必须经过Base64转码):
+``` 
+$ kubectl exec -it test-projected-volume -- /bin/sh
+$ ls /projected-volume/
+user
+pass
+$ cat /projected-volume/user
+root
+$ cat /projected-volume/pass
+1f2d1e2e67df
+```
+可以看到Etcd中保存的密码信息已经以文件的形式出现在了容器的volume目录里，文件的名字就是`kubectl create secret`指定的key
+
+通过这种方式挂载到容器里的secret，一旦对应的Etcd里面的数据被更新，volume里面的内容也会被更新
+
+
+##### ConfigMap
+
+ConfigMap与secret类似，但是它不保存的是不需要加密的、应用所需的配置信息。ConfigMap与secret用法几乎相同:
+`kubectl create configmap`或者编写ConfigMap对象的YAML文件
+
+比如一个Java应用所需要的配置文件保存在ConfigMap里面：
+``` 
+# .properties 文件的内容
+$ cat example/ui.properties
+color.good=purple
+color.bad=yellow
+allow.textmode=true
+how.nice.to.look=fairlyNice
+
+# 从.properties 文件创建 ConfigMap
+$ kubectl create configmap ui-config --from-file=example/ui.properties
+
+# 查看这个 ConfigMap 里保存的信息 (data)
+$ kubectl get configmaps ui-config -o yaml
+apiVersion: v1
+data:
+  ui.properties: |
+    color.good=purple
+    color.bad=yellow
+    allow.textmode=true
+    how.nice.to.look=fairlyNice
+kind: ConfigMap
+metadata:
+  name: ui-config
+  ...
+```
+上述用了`kubectl get -o yaml`，这样会将指定Pod API对象以YAML方式展示出来
+
+##### Downward API
+
+它的作用是让Pod里的容器能够直接获取这个Pod API对象本身信息。
+
+例如:
+``` 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-downwardapi-volume
+  labels:
+    zone: us-est-coast
+    cluster: test-cluster1
+    rack: rack-22
+spec:
+  containers:
+    - name: client-container
+      image: k8s.gcr.io/busybox
+      command: ["sh", "-c"]
+      args:
+      - while true; do
+          if [[ -e /etc/podinfo/labels ]]; then
+            echo -en '\n\n'; cat /etc/podinfo/labels; fi;
+          sleep 5;
+        done;
+      volumeMounts:
+        - name: podinfo
+          mountPath: /etc/podinfo
+          readOnly: false
+  volumes:
+    - name: podinfo
+      projected:
+        sources:
+        - downwardAPI:
+            items:
+              - path: "labels"
+                fieldRef:
+                  fieldPath: metadata.labels
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
