@@ -81,6 +81,11 @@ kubeadm生成bootstrap token之后， 就可以在任意一台安装了kubelet�
 
 ### 单机安装kubernetes集群示例
 准备工作：
+- 关闭selinux
+``` 
+setenforce 0
+sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+```
 - 关闭swap， k8s禁用swap`sudo swapoff -a`
 - 编写配置， `vim /etc/sysctl.d/k8s.conf`:
 ``` 
@@ -237,4 +242,9 @@ kubectl apply -f https://git.io/weave-kube-1.6
 (4) kubectl describe pod -n kube-system , 查看集群所有pod
 
 (5) kubectl get pods --all-namespaces, 查看全部节点
+
+
+### 参考资料
+- [kubernetes-dashboard部署与踩坑](https://www.cnblogs.com/RainingNight/p/deploying-k8s-dashboard-ui.html)
+- [使用kubeadm搭建kubernetes(1.10.2)集群(国内环境)](https://www.cnblogs.com/RainingNight/p/www.cnblogs.com/RainingNight/p/using-kubeadm-to-create-a-cluster.html)
 

@@ -195,6 +195,31 @@ $ cat /projected-volume/pass
 
 通过这种方式挂载到容器里的secret，一旦对应的Etcd里面的数据被更新，volume里面的内容也会被更新
 
+##### Service Account
+
+当有了一个Pod后， 可以在kubernetes里面装一个kubernetes的client， 这样可以从容器里面直接访问并且操作这个kubernetes的API了。kubernetes提供了一种机制解决API Server的授权问题。
+
+service account是kubernetes系统内置的一种"服务账号",它是kubernetes进行权限分配的对象。
+
+Service Account的授权信息和文件保存了它绑定的一种特殊的Secret对象里。这种特殊的secret对象叫做ServiceAccountToken。任何运行在kubernetes
+集群上的应用，都必须使用这个ServiceAccessToken里保存的授权信息才可以合法的访问API Server。
+
+kubernetes提供了一个默认的服务账户(default service account)，任何一个运行在kubernetes里的pod都可以直接使用这个default service 
+account，而无需显示的挂载它。因为kubernetes会为每一个Pod自动的声明一个类型是Secrete，名为default-token-xxx的volume，自动挂载在每个容器的固定目录上：
+``` 
+$ kubectl describe pod nginx-deployment-5c678cfb6d-lg9lw
+Containers:
+...
+  Mounts:
+    /var/run/secrets/kubernetes.io/serviceaccount from default-token-s8rbq (ro)
+Volumes:
+  default-token-s8rbq:
+  Type:       Secret (a volume populated by a Secret)
+  SecretName:  default-token-s8rbq
+  Optional:    false
+```
+
+
 
 ##### ConfigMap
 
@@ -231,7 +256,7 @@ metadata:
 
 ##### Downward API
 
-它的作用是让Pod里的容器能够直接获取这个Pod API对象本身信息。
+它的作用是让Pod里的容器能够直接获取这个Pod API对象本身信息。Downward API里面的信息，一定是Pod里面的容器启动前就能确定下来的信息。
 
 例如:
 ``` 
@@ -268,13 +293,41 @@ spec:
                 fieldRef:
                   fieldPath: metadata.labels
 ```
+上述Pod中声明了一个projected类型volume，volume的数据来源是downward api，这个`downward api volume`声明了要暴露Pod的metadata
+.labels信息给容器。通过这种声明方式，当前Pod的Labels字段的值就会被kubernetes自动挂载成为容器里的`/etc/podinfo/labels`文件。而容器的启动命令是一直打印/etc/podinfo/labels
+的内容，所以启动了这个Pod后可以通过`kubectl logs pod-name`的方式查看到这些Labels字段被打印出来，如:
+``` 
+$ kubectl create -f dapi-volume.yaml
+$ kubectl logs test-downwardapi-volume
+cluster="test-cluster1"
+rack="rack-22"
+zone="us-est-coast"
+```
 
 
+Downward API支持的字段：
+``` 
+1. 使用 fieldRef 可以声明使用:
+spec.nodeName - 宿主机名字
+status.hostIP - 宿主机 IP
+metadata.name - Pod 的名字
+metadata.namespace - Pod 的 Namespace
+status.podIP - Pod 的 IP
+spec.serviceAccountName - Pod 的 Service Account 的名字
+metadata.uid - Pod 的 UID
+metadata.labels['<KEY>'] - 指定 <KEY> 的 Label 值
+metadata.annotations['<KEY>'] - 指定 <KEY> 的 Annotation 值
+metadata.labels - Pod 的所有 Label
+metadata.annotations - Pod 的所有 Annotation
 
+2. 使用 resourceFieldRef 可以声明使用:
+容器的 CPU limit
+容器的 CPU request
+容器的 memory limit
+容器的 memory request
+```
 
-
-
-
+这里可以看到，正如开始说的那样，downward api获取的信息都是Pod里面容器启动前就能确定下来的信息， 如果想要获取Pod容器启动后才能获取的信息， 就应该考虑在Pod里面定义一个sidecar容器(辅助功能)
 
 
 
