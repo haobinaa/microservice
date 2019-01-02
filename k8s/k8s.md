@@ -247,4 +247,4 @@ kubectl apply -f https://git.io/weave-kube-1.6
 ### 参考资料
 - [kubernetes-dashboard部署与踩坑](https://www.cnblogs.com/RainingNight/p/deploying-k8s-dashboard-ui.html)
 - [使用kubeadm搭建kubernetes(1.10.2)集群(国内环境)](https://www.cnblogs.com/RainingNight/p/www.cnblogs.com/RainingNight/p/using-kubeadm-to-create-a-cluster.html)
-
+- [kubernetes/dashboard user guide](https://github.com/kubernetes/dashboard/wiki/Installation)

@@ -199,13 +199,11 @@ $ cat /projected-volume/pass
 
 当有了一个Pod后， 可以在kubernetes里面装一个kubernetes的client， 这样可以从容器里面直接访问并且操作这个kubernetes的API了。kubernetes提供了一种机制解决API Server的授权问题。
 
-service account是kubernetes系统内置的一种"服务账号",它是kubernetes进行权限分配的对象。
+service account是kubernetes系统内置的一种"服务账号",它是kubernetes进行权限分配的对象, 解决API 授权问题。
 
-Service Account的授权信息和文件保存了它绑定的一种特殊的Secret对象里。这种特殊的secret对象叫做ServiceAccountToken。任何运行在kubernetes
-集群上的应用，都必须使用这个ServiceAccessToken里保存的授权信息才可以合法的访问API Server。
+Service Account的授权信息和文件保存了它绑定的一种特殊的Secret对象里。这种特殊的secret对象叫做ServiceAccountToken。任何运行在kubernetes集群上的应用，都必须使用这个ServiceAccessToken里保存的授权信息才可以合法的访问API Server。
 
-kubernetes提供了一个默认的服务账户(default service account)，任何一个运行在kubernetes里的pod都可以直接使用这个default service 
-account，而无需显示的挂载它。因为kubernetes会为每一个Pod自动的声明一个类型是Secrete，名为default-token-xxx的volume，自动挂载在每个容器的固定目录上：
+kubernetes提供了一个默认的服务账户(default service account)，任何一个运行在kubernetes里的pod都可以直接使用这个default service account，而无需显示的挂载它。因为kubernetes会为每一个Pod自动的声明一个类型是Secrete，名为default-token-xxx的volume，自动挂载在每个容器的固定目录上：
 ``` 
 $ kubectl describe pod nginx-deployment-5c678cfb6d-lg9lw
 Containers:
@@ -218,6 +216,11 @@ Volumes:
   SecretName:  default-token-s8rbq
   Optional:    false
 ```
+这个Pod创建完成后，容器就可以从默认的ServiceAccountToken的挂载目录里访问到授权信息和文件，比如这里是`/var/run/secrets/kubernetes.io/serviceaccount from 
+default-token-s8rbq`,应用程序如果需要访问kubernetes API，只需要加载这些授权文件就可以了。
+
+
+这种把kubernetes客户端以容器的方式运行在集群里，然后使用default service token自动授权的方法，称为"InclusterConfig"。
 
 
 
@@ -329,10 +332,142 @@ metadata.annotations - Pod 的所有 Annotation
 
 这里可以看到，正如开始说的那样，downward api获取的信息都是Pod里面容器启动前就能确定下来的信息， 如果想要获取Pod容器启动后才能获取的信息， 就应该考虑在Pod里面定义一个sidecar容器(辅助功能)
 
+### 容器健康检查与恢复机制
+
+
+#### 健康检查
+
+kubernetes中可以为Pod里的容器定义一个健康检查的探针(Probe)，然后kubelet就会根据这个probe的返回值决定这个容器的状态，而不是直接以容器是否运行作为依据，例如:
+``` 
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: test-liveness-exec
+spec:
+  containers:
+  - name: liveness
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthy
+      initialDelaySeconds: 5
+      periodSeconds: 5
+```
+
+上述Pod，会在启动后在/tmp目录下创建一个healthy文件，30s后它会删除这个文件，同时还定义了一个livenessProbe(监控检查)，它会在容器启动后执行指令(exec)`cat 
+/tmp/healthy`。如果这个文件存在，这条指令的返回值就是0，Pod就会认为这个容器不仅启动，而且是健康的，并且这个健康检查在容器启动5s后开始执行(initialDelaySeconds:5),每5s执行一次
+(periodSeconds:5)
 
 
 
+#### 恢复机制
+
+当启动上述Pod后，通过describe可以看到Pod的Events中会报出异常(`kubectl describe pod xxx`), 查看Pod状态(`kubectl get pod xxx`)，可以看到类似如下:
+``` 
+$ kubectl get pod test-liveness-exec
+NAME           READY     STATUS    RESTARTS   AGE
+liveness-exec   1/1       Running   1          1m
+```
+状态仍然是Running，并不是failed。但是RESTART字段从0变成了1：说明了异常的容器已经被kubernetes重启了，这个过程中Runing的状态保持不变。
+
+这个就是kubernetes的恢复机制(restartPolicy)，它是Pod的Spec部分的一个字段(pod.spec.restartPolicy)默认值是always。可以是如下值:
+- Always:任何情况下，只要容器不在运行状态，就自动重启
+- OnFailure: 只在容器异常时才自动重启
+- Never:从不自动重启容器
 
 
+一般以如下原则来使用这些策略：
+1. 只要Pod的restartPolicy指定的策略允许重启异常容器，那么这个Pod就会一直保持Running状态，并进行容器重启
+2. 对于包含多个容器的Pod，只有它里面的所有容器都进入异常状态， Pod才会进入Failed状态，再此之前都是Running状态，Pod的Ready状态会显示正常容器的个数：
+``` 
+$ kubectl get pod test-liveness-exec
+NAME           READY     STATUS    RESTARTS   AGE
+liveness-exec   0/1       Running   1          1m
+```
+
+##### LiveProbe
+liveProbe除了在容器中执行命令外，也可以发起HTTP或TCP请求，如:
+``` 
+#### HTTP liveProbe
+...
+livenessProbe:
+     httpGet:
+       path: /healthz
+       port: 8080
+       httpHeaders:
+       - name: X-Custom-Header
+         value: Awesome
+       initialDelaySeconds: 3
+       periodSeconds: 3
+#### TCP liveProbe
+...
+livenessProbe:
+  tcpSocket:
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 20
+```
+可以在Pod中暴露一个健康检查的Url，或者直接让健康检查去检测应用监听端口。
+
+### Pod模板
+
+kubernetes可以自动给Pod填充某些字段，比如开发人员只需要提交一个基本的Pod YAML,kubernetes可以自动给对应的Pod对象加上其他必要的信息，如Labels，volumes等，这些信息可以是运维人员预先定义好的。这个功能叫做PodPreset(Pod预设置)
 
 
+例如运维人员预先定义好一个PodPreset对象，这个对象中定义了想在开发人员的Pod中追加的字段,叫做PodPreset.yml:
+``` 
+apiVersion: settings.k8s.io/v1alpha1
+kind: PodPreset
+metadata:
+  name: allow-database
+spec:
+  selector:
+    matchLabels:
+      role: frontend
+  env:
+    - name: DB_PORT
+      value: "6379"
+  volumeMounts:
+    - mountPath: /cache
+      name: cache-volume
+  volumes:
+    - name: cache-volume
+      emptyDir: {}
+```
+这个PodPreset中，定义了一个selector。意味着后面追加的定义只会作用于带有label`role:fronted`标签的Pod对象。然后定义了一组spec中的标准字段。比如env定义了一个DB_PORT这个环境变量，volumeMounts定义了volume的挂载目录，volumes定义了一个emptyDir的volume。
+
+然后开发人员定义了一个Pod的YAML：
+``` 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: website
+  labels:
+    app: website
+    role: frontend
+spec:
+  containers:
+    - name: website
+      image: nginx
+      ports:
+        - containerPort: 80
+```
+这个Pod中定义了labels为`role:fronted`，代表着会被上述PodPreset选中。
+
+
+运维人员首先创建了PodPreset对象，开发人员才创建Pod:
+``` 
+$ kubectl create -f preset.yaml
+$ kubectl create -f pod.yaml
+```
+
+
+这个Pod运行起来之后，可以看到这个Pod中多了PodPreset定义的追加内容，另外还会自动加上一个annotation，代表这个Pod对象被PodPreset改动过。
