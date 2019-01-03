@@ -221,3 +221,17 @@ spec:
       maxSurge: 1
       maxUnavailable: 1
 ```
+`rollingUpdate.maxSurge`指定除了DESIRED数量外，在一次"滚动"中，Deployment控制器还可以创建多少个新的Pod；`rollingUpdate.maxUnavailable`指的是，在一次"滚动"中，Deployment控制器可以删除多少个旧的Pod
+
+所以在升级过程中,Pod、Deployment、ReplicaSet的关系如下:
+![](../images/k8s/pod_replicaSet.png)
+
+Deployment控制器控制ReplicaSet数目;一个ReplicaSet对应一个应用版本，并且控制这个版本Pod数量
+
+##### 滚动更新之回滚
+当滚动更新过程中，如果新的Pod有问题，创建出了问题。执行`kubectl rollout undo`可以把这个Deployment回滚到上一个版本:
+``` 
+$ kubectl rollout undo deployment/nginx-deployment
+```
+
+如果要回滚到更早的版本，则需要查看每次Deployment变更对应的版本， 执行`kubectl rollout histoyr`即可，然后在回滚的时候指定版本号:`kubectl rollout undo deployment/nginx-deployment --to-revsison=2`
