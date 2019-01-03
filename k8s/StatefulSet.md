@@ -15,6 +15,10 @@ Deployment可以根据Pod模板新建Pod，也可以kill掉任何一个Pod。在
 
 > StatefulSey的核心功能就是通过某种方式记录这些状态，然后Pod被重新创建时，能够为新Pod恢复这些状态。
 
+## 拓扑状态的保障
+
+StatefulSet使用Headless Service机制来保障Pod的拓扑状态
+
 ### Service访问机制
 
 Service是kubernetes将一组Pod暴露给外界的一种访问机制。如一个Deployment有3个Pod，定义了一个Service之后，用户只要能访问这个Service，它就能访问到某个具体的Pod。
@@ -123,9 +127,127 @@ Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
 Name:      web-1.nginx
 Address 1: 10.244.2.7
 ```
+备注:busybox这个镜像问题，有些版本的镜像nslookup找不到，直接ping web-0.nginx也能找到ip
 
 
-### 拓扑状态
+## 存储状态的保障
 
+StatefulSet使用 Persistent Volume Claim 来保障存储状态
 
-### 存储状态
+### Persistent Volume Claim（PVC）
+
+如果要在Pod里面声明Volume，需要在pod中加上spec.volumes，然后在这个字段里面定义具体的volume 类型，如hostPath。
+
+作为开发者，可能对kubernetes的持久化存储项目不了解，不知道有哪些类型的volume， kubernetes引入persistent volume claim(pvc)和persistent volume(pv)的API对象来降低用户声明和使用持久化volume的门槛
+
+#### PVC的定义
+1.定义一个PVC，声明想要volume的属性
+``` 
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pv-claim
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+这个PVC对象中，没有任何volume的细节，只有描述性的属性和定义。比如需要这个volume至少是一个Gib(spec.resources.requests.storage=1Gi), 声明这个volume的挂载方式是可读写(spect.accessModes=ReadWriteOnce)
+
+2.在应用的Pod中，声明使用这个PVC
+``` 
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pv-pod
+spec:
+  containers:
+    - name: pv-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: pv-storage
+  volumes:
+    - name: pv-storage
+      persistentVolumeClaim:
+        claimName: pv-claim
+```
+这个Pod的Volumes定义中，只需要声明是persistentVolumeClaim，然后指定PVC的名字，不必关心volume本身的定义。
+如果这个时候创建这个PVC对象，kubernetes会为它绑定一个符合条件的volume，这个volume来自于PV(persistent volume)对象
+
+#### PV对象的定义
+
+一个PV对象的定义一般如下:
+``` 
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv-volume
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 10Gi
+  rbd:
+    monitors:
+    - '10.16.154.78:6789'
+    - '10.16.154.82:6789'
+    - '10.16.154.83:6789'
+    pool: kube
+    image: foo
+    fsType: ext4
+    readOnly: true
+    user: admin
+    keyring: /etc/ceph/keyring
+    imageformat: "2"
+    imagefeatures: "layering"
+```
+这个pv对象中有个字段spec.rbd，是一种Ceph RBD Volume。
+
+kubernetes会为刚刚创建的PVC绑定这个PV对象，这种设计有点类似于接口和实现的关系。开发者只需要知道接口(PVC),运维人员给出了接口的具体实现(PV)， 这种解耦就避免了向开发者暴露过多的存储系统细节而带来的隐患。
+
+### StatefulSet使用PVC、PV来进行存储状态管理
+StatefulSet的YAML(statefulset_pvc.yaml)如下:
+``` 
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  serviceName: "nginx"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.9.1
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+```
+这个StatefulSet额外添加了一个 volumeClaimTemplates 字段，代表凡是被这个StatefulSet管理的Pod都会声明一个PVC，PVC的定义就来源于 volumeClaimTemplates 这个模板的字段。
+
+这个自动创建的PVC与PV绑定成功后，就会进入Bound字段，这就意味着这个Pod可以挂载并使用这个PV了。
