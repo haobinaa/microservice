@@ -33,10 +33,13 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
 - [k8s基础原理和集群部署(单机集群国内可用)](https://github.com/haobinaa/microservice/blob/master/k8s/k8s.md)
 - [应用容器化](./k8s/app_to_container.md)
 - [pod组件](./k8s/pod.md)
-- [控制器模型](./k8s/controller_model.md)
-- [StatefulSet保障拓扑状态和存储状态](./k8s/StatefulSet.md)
-- [使用StatefulSet部署mysql集群](./k8s/msyql_cluster.md)
-- [容器化守护进程DaemonSet](./k8s/DaemonSet.md)
+
+- 容器编排：
+  - [控制器模型-Deployment](./k8s/controller_model.md)
+  - [StatefulSet保障拓扑状态和存储状态](./k8s/StatefulSet.md)
+    - [使用StatefulSet部署mysql集群](./k8s/msyql_cluster.md)
+  - [容器化守护进程DaemonSet](./k8s/DaemonSet.md)
+  - [离线编排-Job/CronJob](./k8s/job&cronjob.md)
 - [声明式API]
 - [RBAC控制]
 - [Operator]
