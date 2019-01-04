@@ -251,3 +251,29 @@ spec:
 这个StatefulSet额外添加了一个 volumeClaimTemplates 字段，代表凡是被这个StatefulSet管理的Pod都会声明一个PVC，PVC的定义就来源于 volumeClaimTemplates 这个模板的字段。
 
 这个自动创建的PVC与PV绑定成功后，就会进入Bound字段，这就意味着这个Pod可以挂载并使用这个PV了。
+
+### StatefulSet滚动更新
+
+#### 触发滚动更新
+
+StatefulSet可以编排"有状态应用"，如果需要对StatefulSet进行滚动，只需要修改StatefulSet的Pod模板，就会自动触发"滚动更新", 例如:
+``` 
+$ kubectl patch statefulset mysql --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"mysql:5.7.23"}]'
+statefulset.apps/mysql patched
+```
+上述使用了`kubectl patch`命令，以"补丁"的方式(Json格式)修改了一个API对的指定字段,即:`spec/template/spec/containers/0/image`。
+
+这样StatefulSet Controller会按照Pod编号相反的顺序，逐一更新这个StatefulSet管理的Pod，如果更新发生错误，这次"滚动更新"就会停止。
+
+#### 精准的控制-金丝雀发布
+
+StatefulSet的`spec.updateStrategy.rollingUpdate`的partition字段可以指定多个实例的一部分不会更新到最新版本。这样就可以实现灰度发布或者金丝雀发布。
+
+例如:
+``` 
+$ kubectl patch statefulset mysql -p '{"spec":{"updateStrategy":{"type":"RollingUpdate","rollingUpdate":{"partition":2}}}}'
+statefulset.apps/mysql patched
+```
+与上述一样也是用patch补丁的方式， (更多patch的用法参考[官网](https://k8smeetup.github.io/docs/tasks/run-application/update-api-object-kubectl-patch))
+
+这种方式类似用kubectl edit打开对象，将partition字段修改为2。当Pod模板发生了变化(比如images做了修改)的时候，这样只有序号大于2的Pod才会被升级，序号小于2的Pod即使被删除了重建也不会升级。
