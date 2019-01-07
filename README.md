@@ -40,8 +40,8 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
     - [使用StatefulSet部署mysql集群](./k8s/msyql_cluster.md)
   - [容器化守护进程DaemonSet](./k8s/DaemonSet.md)
   - [离线编排-Job/CronJob](./k8s/job&cronjob.md)
-- [声明式API]
-- [RBAC控制]
+- [声明式API](./k8s/API.md)
+- [RBAC控制](./k8s/rbac.md)
 - [Operator]
 - [持久化存储原理PV、PVC、StorageClass]
 - [存储插件]
@@ -49,6 +49,10 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
 - [DNS服务发现(Service原理)]
 - [Ingress]
 - [容器日志管理]
+
+#### Istio使用
+
+
 ### springcloud
 
 SpringCloud是Spring生态提供的一系列微服务组件
