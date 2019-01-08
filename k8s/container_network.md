@@ -160,6 +160,27 @@ VXLAN的覆盖网络的设计思想是:在现有的三层网络之上，覆盖�
 
 为了在二层网络上打通隧道，VXLAN宿主机上设置一个特殊的网络设备作为隧道的两端，这个设备叫VTEP(Virtual Tunnel End Point 虚拟隧道端点)。VTEP的作用和fluentd进程作用相似，不过它的封装和解封都在内核里完成，所以相较于UDP模式性能会更好，也是目前主流的方案
 
+##### VXLAN流程
 
+![](../images/k8s/vxlan.png)
+
+每台宿主机上的都有个一个叫flannel.1的设备，就是VXLAN所需的VTEP设备，它既有IP地址也有MAC地址
+
+上图container1的IP地址是10.1.15.2，要访问Container2的IP10.1.16.3
+
+(1) container1发出请求后，目的地址是10.1.16.3的IP包首先会出现在docker0网桥上，然后被本机的flannel.1处理。
+
+(2) 源VTEP设备(Node1)收到原始IP包后，需要想办法加上MAC地址，封装成一个二层的数据帧，发送给目的VTEP(Node2)
+
+(3) flanneld生成的路由规则可以知道目的VTEP设备的IP地址，根据ARP协议可以得到目的VTEP的MAC地址，就可以封装成一个二层的网络帧如下:
+![](../images/k8s/vtep_data_frame.png)
+这个封装出来的二层数据帧叫做内部数据帧(Inner Ethernet Frame)，Linux内核会进一步封装，将这个内部数据帧封装成一个普通的数据帧，让他可以载着内部数据帧通过宿主机的eth0进行传输，这次封装出来的叫外部数据帧(Outer Enthernet Frame)
+
+(4) linux会把这个外部数据帧封装成一个UDP包发出去，但是这里只知道目的VTEP的MAC地址，并不知道目的宿主机的MAC地址，这里就是flannel.1内部维护的一个转发数据库，可以通过目的VTEP的MAC地址查出目的主机的IP地址。所以查出目的主机的IP就会进行一个正常的数据包的封装
+
+最后会封装出的外部数据帧的格式如下:
+![](../images/k8s/vxlan_out_frame.png)
+
+(5) 接着目的宿主机就会拆包，然后发给目的宿主机的flannel.1设备进行解封，发给宿主机上的网络
 ### 附录
 - [Linux route指令 路由表](https://blog.csdn.net/vevenlcf/article/details/48026965)
