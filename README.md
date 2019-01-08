@@ -45,9 +45,9 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
 - [Operator-自定义有状态应用](./k8s/operator.md)
 - 存储机制
   - [PV、PVC、StorageClass和本地化持久卷](./k8s/pv_pvc_storageClass.md)
+  - [存储插件]
 - 网络
-  - [容器网络]
-  - [容器跨主机网络]
+  - [容器网络](./k8s/container_network.md)
   - [kubernetes中网络模型]
   - [kubernetes中三层网络方案]
 - [DNS服务发现(Service原理)]
