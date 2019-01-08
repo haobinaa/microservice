@@ -42,16 +42,21 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
   - [离线编排-Job/CronJob](./k8s/job&cronjob.md)
 - [声明式API](./k8s/API.md)
 - [RBAC控制](./k8s/rbac.md)
-- [Operator]
-- [持久化存储原理PV、PVC、StorageClass]
-- [存储插件]
-- [容器网络]
+- [Operator-自定义有状态应用](./k8s/operator.md)
+- 存储机制
+  - [PV、PVC、StorageClass和本地化持久卷](./k8s/pv_pvc_storageClass.md)
+- 网络
+  - [容器网络]
+  - [容器跨主机网络]
+  - [kubernetes中网络模型]
+  - [kubernetes中三层网络方案]
 - [DNS服务发现(Service原理)]
 - [Ingress]
 - [容器日志管理]
 
 #### Istio使用
 
+- [Istio简介](./istio/istio_intruduce.md)
 
 ### springcloud
 
