@@ -9,15 +9,7 @@
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
-  <artifactId>dubbo</artifactId>
-  <packaging>pom</packaging>
-  <modules>
-    <module>dubbo-interface</module>
-    <module>dubbo-provider</module>
-    <module>dubbo-consumer</module>
-    <module>spi-load</module>
-  </modules>
-
+  <artifactId>springcloud</artifactId>
 
 
 </project>

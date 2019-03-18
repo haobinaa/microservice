@@ -1,5 +1,5 @@
 ### 使用概述
-1. dubbo注册中心依赖于zookeeper， 使用前需要安装zookeeper
+1.dubbo注册中心依赖于zookeeper， 使用前需要安装zookeeper
 
 具体zk的安装方式就不详细说， 默认zk端口为2181, 注意需要开启防火墙的2181端口，以免注册不上
 
@@ -189,7 +189,7 @@ consumer代码:
 
 #### 暴露一个服务过程
 
-![](https://raw.githubusercontent.com/haobinaa/microservice/master/images/dubbo_rpc.png)
+![](../../images/dubbo/dubbo_export_service.png)
 
 - 首先 ServiceConfig 类拿到对外提供服务的实际类 ref（如：UserServiceImpl），然后通过 ProxyFactory 类的 getInvoker 方法使用 ref 生成一个 AbstractProxyInvoker 实例，到这一步就完成了具体服务到 Invoker 的转化。接下来就是 Invoker 转换到 Exporter 的过程。Dubbo 处理服务暴露的关键就在 Invoker 转换到 Exporter 的过程，上图中的红色部分
 
