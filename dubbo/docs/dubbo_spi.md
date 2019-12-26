@@ -15,7 +15,7 @@ JDK 中的 SPI（Service Provider Interface）是面向接口编程的，服务�
 .Driver 的文件，文件内容就是 MySQL 对 java.sql.Driver 接口的实现类:`com.mysql.jdbc.Driver`
 
 在java的类加载当中， 如果一个类由类加载器 A 加载，那么这个类依赖的类也是由相同的类加载器加载。用来搜索开发商提供的 SPI 扩展实现类的 API 类（ServiceLoader）是使用 Bootstrap 
-ClassLoader 加载的，那么 ServiceLoader 里面依赖的类应该也是由 Bootstrap CalssLoader 来加载。 但是用户提供的包含SPI实现类的Jar包是由Appclassloader记载， 所以需要一种违反双亲委派模型的方法，线程上下文类加载器 ContextClassLoader 就是为了解决这个问题。
+ClassLoader 加载的，那么 ServiceLoader 里面依赖的类应该也是由 Bootstrap ClassLoader 来加载。 但是用户提供的包含SPI实现类的Jar包是由Appclassloader记载， 所以需要一种违反双亲委派模型的方法，线程上下文类加载器 ContextClassLoader 就是为了解决这个问题。
 
 在`ServiceLoader`的`load()`方法中:
 ``` 

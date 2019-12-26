@@ -23,4 +23,4 @@
 
 ### idea
 .idea/
-microservice.iml
+*.iml

@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  *
- *
  * @author HaoBin
  * @version $Id: ProviderApp.java, v0.1 2018/12/19 17:44 HaoBin 
  */
