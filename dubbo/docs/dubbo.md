@@ -202,3 +202,4 @@ consumer代码:
 - 首先 ReferenceConfig 类的 init 方法调用 Protocol 的 refer 方法生 成 Invoker 实例（如上图中的红色部分），这是服务消费的关键。接下来把 Invoker 转换为客户端需要的接口（如：UserServiceBo）
 
 - Dubbo 协议的 invoker 转换为客户端需要的接口，发生在 DubboProtocol 的 refer 方法中，它主要创建一个 netty client 链接服务提供者，通讯细节由 Dubbo 自己实现
+

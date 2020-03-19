@@ -3,14 +3,10 @@
  */
 package com.haobin.code;
 
-import static java.util.stream.Collectors.toList;
 
 import com.alibaba.dubbo.common.extension.ExtensionLoader;
 import com.haobin.code.service.Robot;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.ServiceLoader;
-import java.util.stream.Stream;
 
 /**
  * java 中 SPI 机制
@@ -27,14 +23,12 @@ public class SPITest {
     private static void javaSPI() {
         ServiceLoader<Robot> serviceLoader = ServiceLoader.load(Robot.class);
         System.out.println("Java SPI");
-        serviceLoader.forEach(robot -> {
-            robot.sayHello();
-        });
+        serviceLoader.forEach((robot -> robot.sayHello()));
     }
 
     private static void dubboSPI() {
         ExtensionLoader<Robot> extensionLoader = ExtensionLoader.getExtensionLoader(Robot.class);
-        Robot optimusPrime = extensionLoader.getExtension("optimusPrime");
+        Robot optimusPrime = extensionLoader.getExtension("zkconfig");
         optimusPrime.sayHello();
     }
 }

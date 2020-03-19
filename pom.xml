@@ -11,6 +11,7 @@
   <modules>
     <module>dubbo</module>
     <module>springcloud</module>
+    <module>hytrix</module>
   </modules>
 
   <parent>
