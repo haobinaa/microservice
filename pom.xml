@@ -12,6 +12,7 @@
     <module>dubbo</module>
     <module>springcloud</module>
     <module>hytrix</module>
+    <module>flow-limit</module>
   </modules>
 
   <parent>

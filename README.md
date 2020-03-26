@@ -64,3 +64,9 @@ Istio是ServiceMesh的一种落地方案， 依赖于Kubernetes
 
 SpringCloud是Spring生态提供的一系列微服务组件, [简介](./springcloud/springcloud.md)
 
+#### hystrix
+
+- [使用入门 demo](https://github.com/star2478/java-hystrix/wiki/Hystrix%E4%BD%BF%E7%94%A8%E5%85%A5%E9%97%A8%E6%89%8B%E5%86%8C%EF%BC%88%E4%B8%AD%E6%96%87%EF%BC%89)
+- [原理简介](https://my.oschina.net/7001/blog/1619842)
+- [官网文档翻译](https://segmentfault.com/a/1190000012439580)
+

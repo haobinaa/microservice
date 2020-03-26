@@ -17,7 +17,7 @@ import java.util.ServiceLoader;
 public class SPITest {
 
     public static void main(String[] args) {
-        dubboSPI();
+        javaSPI();
     }
 
     private static void javaSPI() {
@@ -28,7 +28,7 @@ public class SPITest {
 
     private static void dubboSPI() {
         ExtensionLoader<Robot> extensionLoader = ExtensionLoader.getExtensionLoader(Robot.class);
-        Robot optimusPrime = extensionLoader.getExtension("zkconfig");
+        Robot optimusPrime = extensionLoader.getExtension("bumblebee");
         optimusPrime.sayHello();
     }
 }
