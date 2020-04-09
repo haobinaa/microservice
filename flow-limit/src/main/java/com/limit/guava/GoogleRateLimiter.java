@@ -1,7 +1,6 @@
 package com.limit.guava;
 
 import com.revinate.guava.util.concurrent.RateLimiter;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -13,7 +12,7 @@ public class GoogleRateLimiter {
 
 
     public static void main(String[] args) {
-        testSmoothWarmingUp();
+        testSmoothBursty3();
     }
 
 
