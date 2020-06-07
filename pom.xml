@@ -10,7 +10,6 @@
   <version>1.0-SNAPSHOT</version>
   <modules>
     <module>dubbo</module>
-    <module>springcloud</module>
     <module>hytrix</module>
     <module>flow-limit</module>
   </modules>

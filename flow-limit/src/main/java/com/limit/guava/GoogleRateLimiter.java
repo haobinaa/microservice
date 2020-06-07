@@ -12,7 +12,7 @@ public class GoogleRateLimiter {
 
 
     public static void main(String[] args) {
-        testSmoothBursty3();
+        testSmoothBursty();
     }
 
 
