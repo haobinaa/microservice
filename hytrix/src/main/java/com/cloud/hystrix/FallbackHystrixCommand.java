@@ -7,7 +7,7 @@ import com.netflix.hystrix.exception.HystrixBadRequestException;
 /**
  * @Author HaoBin
  * @Create 2020/3/18 17:33
- * @Description: 触发 fallback 测试
+ * @Description: 触发 fallback 测试(command execute 失败后走的逻辑)
  **/
 public class FallbackHystrixCommand extends HystrixCommand<String> {
     private final String name;

@@ -12,6 +12,10 @@ public class SimpleHystrixCommand extends HystrixCommand<String> {
 
     private final String name;
 
+    /**
+     * 配置 HystrixCommand
+     * hystrix 详细配置介绍: https://github.com/Netflix/Hystrix/wiki/Configuration
+     */
     public SimpleHystrixCommand(String name) {
         // 必须指定 group
         super(Setter
