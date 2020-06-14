@@ -1,11 +1,7 @@
 package com.cloud.hystrix;
 
-import com.netflix.hystrix.HystrixCommand;
-import com.netflix.hystrix.HystrixCommandGroupKey;
-import com.netflix.hystrix.HystrixCommandKey;
-import com.netflix.hystrix.HystrixCommandProperties;
+import com.netflix.hystrix.*;
 import com.netflix.hystrix.HystrixCommandProperties.ExecutionIsolationStrategy;
-import com.netflix.hystrix.HystrixThreadPoolKey;
 
 /**
  * @Author HaoBin
@@ -19,13 +15,20 @@ public class SimpleHystrixCommand extends HystrixCommand<String> {
     public SimpleHystrixCommand(String name) {
         // 必须指定 group
         super(Setter
-        .withGroupKey(HystrixCommandGroupKey.Factory.asKey("simple-group-key"))
-        .andCommandKey(HystrixCommandKey.Factory.asKey("simple-command-key"))
-        .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("simple-threadpoll-key"))
-        .andCommandPropertiesDefaults(HystrixCommandProperties.Setter()
-            // 信号量隔离
-            .withExecutionIsolationStrategy(ExecutionIsolationStrategy.SEMAPHORE)
-            .withExecutionTimeoutInMilliseconds(5000)));
+                // 分组key
+                .withGroupKey(HystrixCommandGroupKey.Factory.asKey("simple-group-key"))
+                // command key
+                .andCommandKey(HystrixCommandKey.Factory.asKey("simple-command-key"))
+                // command 属性配置
+                .andCommandPropertiesDefaults(HystrixCommandProperties.Setter()
+                        // 信号量隔离
+                        .withExecutionIsolationStrategy(ExecutionIsolationStrategy.SEMAPHORE)
+                        .withExecutionTimeoutInMilliseconds(5000))
+                // 线程池 key
+                .andThreadPoolKey(HystrixThreadPoolKey.Factory.asKey("simple-thread-poll-key"))
+                // 线程池属性配置
+                .andThreadPoolPropertiesDefaults(HystrixThreadPoolProperties.Setter().withCoreSize(2).withMaxQueueSize(10))
+        );
         this.name = name;
     }
 
